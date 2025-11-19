@@ -5,6 +5,7 @@ This document shows how to query **GBIF data** directly from **cloud-native Parq
 It also covers local caching strategies, performance benchmarks, and the reason to use Parquet/S3 instead of CSV downloads and API-based workflows.
 
 Reference: https://data-blog.gbif.org/post/aws-and-gbif/.
+See python examples in the code folder. 
 
 ---
 
