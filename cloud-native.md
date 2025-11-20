@@ -1,7 +1,7 @@
 
 # Cloud-Native GBIF Data Access with DuckDB & ClickHouse
 
-This document shows how to query **GBIF data** directly from **cloud-native Parquet files stored in S3**, using **Python**, **DuckDB**, and **ClickHouse**.
+This document shows how to query GBIF data directly from cloud-native Parquet files stored in S3, using Python, DuckDB, and ClickHouse.
 It also covers local caching strategies, performance benchmarks, and the reason to use Parquet/S3 instead of CSV downloads and API-based workflows.
 
 Reference: https://data-blog.gbif.org/post/aws-and-gbif/.
@@ -11,8 +11,8 @@ See python examples in the code folder.
 
 ## Why Cloud-Native Formats?
 
-Traditional approaches (CSV files or API requests) often limits how modern biodiversity data analytics can be done. 
-CSV files can be slow and you must download entire dataset. 
+Traditional approaches (CSV files or API requests) often limits how modern data analytics can be done. 
+CSV files can be slow and you must download entire dataset locally. 
 APIs often impose rate limit, has limited query options. 
 
 
@@ -22,7 +22,7 @@ APIs often impose rate limit, has limited query options.
 * Techniques to skip / predicate pushdown (see https://pola.rs/posts/predicate-pushdown-query-optimizer) 
 * Highly compressed
 * Distributed across thousands of partition files
-* Query directly on S3 — **no download needed**
+* Query directly on S3: no download needed
 * Works with high-performance engines (DuckDB, ClickHouse, Arrow, Spark, etc.)
 
 
@@ -30,7 +30,7 @@ APIs often impose rate limit, has limited query options.
 
 ## DuckDB Workflow (Python)
 
-R users: identical workflows exist via **`arrow`**, **`duckdb`**, and **`DBI`** connectors.
+R users: identical workflows exist via `arrow`, `duckdb`, and `DBI` connectors.
 
 
 DuckDB can query Parquet files stored in S3 directly:
@@ -113,16 +113,49 @@ GBIF snapshots are large (hundreds of GB), so caching locally produces huge spee
   
 ### Best workflow
 
-1. **Download once** (specific partitions or entire snapshot)
-2. **Cache locally** (DuckDB or simple shell script)
-3. Run complex analytics with **ClickHouse** or **DuckDB**
+1. Download once (specific partitions or entire snapshot)
+2. Cache locally (DuckDB or simple shell script)
+3. Run complex analytics with ClickHouse or DuckDB
 4. Refresh cache only when GBIF releases new monthly datasets
 
 ---
 
 ## Speed-up Techniques 
 
-* **Sampling** (`sample_limit=1_000_000`) – avoid scanning billions of rows
-* **Partition pruning** – scan only one Parquet partition for quick checks
-* **Local caching** – download once, reuse forever
-* **Parallelism** – DuckDB uses 4 threads, ClickHouse uses many
+* Sampling (`sample_limit=1_000_000`) – avoid scanning billions of rows
+* Partition pruning – scan only one Parquet partition for quick checks
+* Local caching – download once, reuse forever
+* Parallelism – DuckDB uses 4 threads, ClickHouse uses many
+
+## Other examples: OBIS 
+
+https://github.com/iobis/speciesgrids 
+
+```
+aws s3 cp --recursive s3://obis-products/speciesgrids/h3_7 . --no-sign-request
+```
+
+Then using python libraries: 
+
+```
+import geopandas
+import lonboard
+import seaborn as sns
+
+filters = [("genus", "==", "Gadus")]
+gdf = geopandas.read_parquet("../h3_7/", filters=filters)[["cell", "records", "geometry", "species"]]
+
+def generate_colors(unique_species):
+    palette = sns.color_palette("Paired", len(unique_species))
+    rgb_colors = [[int(r*255), int(g*255), int(b*255)] for r, g, b in palette]
+    color_map = dict(zip(unique_species, rgb_colors))
+    colors = lonboard.colormap.apply_categorical_cmap(gdf["species"], color_map)
+    return colors
+
+point_layer = lonboard.ScatterplotLayer.from_geopandas(gdf)
+point_layer.get_radius = 10000
+point_layer.radius_max_pixels = 2
+point_layer.get_fill_color = generate_colors(gdf["species"].unique())
+lonboard.Map([point_layer])
+```
+
